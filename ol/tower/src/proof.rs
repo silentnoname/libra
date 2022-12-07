@@ -94,11 +94,18 @@ pub fn mine_and_submit(
                     config.get_waypoint(swarm_path.clone())?,
                 )?;
                 match next_proof::get_next_proof_from_chain(config, client, swarm_path.clone()) {
-                    Ok(n) => n,
+                    Ok(n) =>{ 
+                        warn!("WARN: using next proof params from local");
+                    n},
                     // failover to local mode, if no onchain data can be found.
                     // TODO: this is important for migrating to the new protocol.
                     // in future versions we should remove this since we may be producing bad proofs, and users should explicitly choose to use local mode.
-                    Err(_) => next_proof::get_next_proof_params_from_local(config)?,
+                    //Err(_) => next_proof::get_next_proof_params_from_local(config)?,
+                    Err(_) => {
+                        warn!("WARN: no local proofs found, assuming genesis proof");
+                        NextProof::genesis_proof(&config)
+                    }
+                    
                 }
             }
         };
@@ -115,6 +122,12 @@ pub fn mine_and_submit(
             "Proof mined: proof_{}.json created.",
             block.height.to_string()
         );
+        if get_onchain_tower_state(tx_params.owner_address.to_owned()).is_err() {
+            warn!("cannot get tower state, maybe TowerState not initialized");
+            maybe_send_genesis_proof(&tx_params)
+          } else {
+            println!("\nprocessing backlog\n");
+
 
         // submits backlog to client
         match backlog::process_backlog(&config, &tx_params) {
@@ -237,6 +250,43 @@ pub fn get_latest_proof(config: &AppCfg, purge_if_bad: bool) -> Result<VDFProof,
 
     parse_block_file(&current_block_path, purge_if_bad)
 }
+
+
+pub fn maybe_send_genesis_proof(tx_params: &TxParams) -> Result<BacklogSuccess, CarpeError> {
+    // check if the tower state has been initialized.
+    // otherwise this is a genesis proof.
+  
+    // check if any proof_0.json has been mined
+    if let Some(proof) = get_proof_zero().ok() {
+      match commit_proof_tx(tx_params, proof) {
+        Ok(_) => {
+          println!("submitted proof zero");
+          Ok(BacklogSuccess { success: true })
+        }
+        Err(e) => {
+          dbg!(&e);
+          Err(CarpeError::from(e))
+        }
+      }
+    } else {
+      error!("No genesis proof found in vdf_proofs dir");
+      Ok(BacklogSuccess { success: false })
+    }
+  }
+
+  fn get_proof_zero() -> Result<VDFProof, Error> {
+    let cfg = get_cfg()?;
+    let path = cfg
+      .workspace
+      .node_home
+      .join(cfg.workspace.block_dir)
+      .join("proof_0.json");
+    let string = std::fs::read_to_string(path)?;
+    let proof: VDFProof = serde_json::from_str(&string)?;
+  
+    Ok(proof)
+  }
+
 
 /* ////////////// */
 /* / Unit tests / */
