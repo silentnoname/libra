@@ -60,4 +60,4 @@ criterion = "0.3"
 
 [[bench]]
 name = "bench"
-harness = false
+

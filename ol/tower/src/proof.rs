@@ -75,7 +75,7 @@ pub fn mine_once(config: &AppCfg, next: NextProof) -> Result<VDFProof, Error> {
 
 /// Write block to file
 pub fn mine_and_submit(
-    config: &mut AppCfg,
+    mut config: &mut AppCfg,
     tx_params: TxParams,
     local_mode: bool,
     swarm_path: Option<PathBuf>,
@@ -138,8 +138,14 @@ pub fn mine_and_submit(
 
         if backlog::get_remote_tower_height(&tx_params).is_err() {
             println!("WARN: cannot get tower state, maybe TowerState not initialized");
-            backlog::maybe_send_genesis_proof(&config, &tx_params);
-          } else {
+            match backlog::maybe_send_genesis_proof(&config, &tx_params){
+                Ok(()) => println!("Success: Genesis proof committed to chain"),
+                Err(e) => {
+                    // don't stop on tx errors
+                    println!("ERROR: Failed sending genesis proof, message: {:?}", e);
+                }
+            }
+          } 
             println!("\nprocessing backlog\n");
 
         // submits backlog to client
@@ -149,7 +155,7 @@ pub fn mine_and_submit(
                 // don't stop on tx errors
                 println!("ERROR: Failed processing backlog, message: {:?}", e);
             }
-        }
+        
     }
 }
 }
