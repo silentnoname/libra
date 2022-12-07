@@ -227,3 +227,42 @@ pub fn get_remote_tower_height(tx_params: &TxParams) -> Result<(i64, i64), Error
         }
     }
 }
+
+pub fn maybe_send_genesis_proof(config: &AppCfg, tx_params: &TxParams) -> Result<(), TxError> {
+    // check if the tower state has been initialized.
+    // otherwise this is a genesis proof.
+
+    // check if any proof_0.json has been mined
+    if let Some(proof) = get_proof_zero(config).ok() {
+      match commit_proof_tx(tx_params, proof) {
+        Ok(_) => {
+          println!("submitted proof zero");
+          Ok(())
+        }
+        Err(e) => {
+          dbg!(&e);
+          Err(TxError::from(e))
+        }
+      }
+    } else {
+      error!("No genesis proof found in vdf_proofs dir");
+      Ok(())
+    }
+  }
+
+  fn get_proof_zero(config: &AppCfg) -> Result<VDFProof, Error> {
+    let mut blocks_dir = config.workspace.node_home.clone();
+    blocks_dir.push(&config.workspace.block_dir);
+    let genesis_roof_number = 0;
+    let path = PathBuf::from(format!(
+        "{}/{}_{}.json",
+        blocks_dir.display(),
+        FILENAME,
+        genesis_roof_number
+    ));
+    let file = File::open(&path).map_err(|e| Error::from(e))?;
+
+    let reader = BufReader::new(file);
+    let proof: VDFProof = serde_json::from_reader(reader).map_err(|e| Error::from(e))?;  
+    Ok(proof)
+}
