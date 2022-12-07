@@ -10,6 +10,7 @@ use glob::glob;
 use ol::node::client;
 use ol_types::block::VDFProof;
 use ol_types::config::AppCfg;
+use std::f32::consts::E;
 use std::{fs, io::Write, path::PathBuf, time::Instant};
 use txs::tx_params::TxParams;
 
@@ -103,12 +104,23 @@ pub fn mine_and_submit(
                     // TODO: this is important for migrating to the new protocol.
                     // in future versions we should remove this since we may be producing bad proofs, and users should explicitly choose to use local mode.
                    // Err(_) => next_proof::get_next_proof_params_from_local(config)?,
-                   Err(_) => {
-                    println!("WARN: no local proofs found, assuming genesis proof");
-                    NextProof::genesis_proof(&config)
+                   Err(e) => {
+                    dbg!(&e);
+                    // this may be a genesis proof
+                    match next_proof::get_next_proof_params_from_local(&mut config) {
+                      Ok(n) => {
+                        println!("WARN: using next proof params from local");
+                        n
+                      }
+                      Err(_) => {
+                        println!("WARN: no local proofs found, assuming genesis proof");
+                        NextProof::genesis_proof(&config)
+                      }
+                    }
+                  }
                 }
                 }
-            }
+            
         };
 
         println!("Mining VDF Proof # {}", next.next_height);
